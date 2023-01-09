@@ -1,0 +1,48 @@
+//  appartment.h
+
+#ifndef appartment_h
+#define appartment_h
+
+#include <stdio.h>
+
+/// Модель кода
+typedef struct {
+    /// Этаж
+    int floor;
+    /// Номер
+    int number;
+} Location;
+
+/// Модель комнаты
+typedef struct {
+    /// Площадь
+    double area;
+    /// Кол-во окон
+    int windows;
+    /// Выход на балкон: 0 - нет, 1- есть
+    int is_balkony;
+} Room;
+
+/// Модель квартиры
+typedef struct {
+    /// Код
+    char code[12];
+    /// Код
+    Location location;
+    /// Общая площадь
+    double area;
+    /// Количество комнат
+    int count_rooms;
+    /// Список комнат
+    Room* rooms;
+} Appartment;
+
+/// Модель квартир
+typedef struct {
+    /// Количество квартир
+    int count_appartments;
+    /// Список квартир
+    Appartment* appartments;
+} Appartments;
+
+#endif /* appartment_h */
