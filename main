@@ -1,0 +1,663 @@
+#define _CRT_SECURE_NO_DEPRECATE
+#include <stdio.h>
+#include <stdlib.h>
+#include <locale.h>
+#include <string.h>
+#include <math.h>
+#include <time.h>
+#include "appartment.h"
+
+#define ROOM_FORMAT "{\"area\":%lf,\"windows\":%d,\"is_balkony\":%d}"
+#define APPS_FORMAT "{\"count_appartments\":%d,\"appartments\":["
+#define APP_FORMAT_IN "{\"count_rooms\":%d,\"area\":%lf,\"code\":\"%[^\"]\",\"location\":{\"floor\":%d,\"number\":%d},\"rooms\":["
+#define APP_FORMAT_OUT "{\"count_rooms\":%d,\"area\":%lf,\"code\":\"%s\",\"location\":{\"floor\":%d,\"number\":%d},\"rooms\":["
+
+/// Сохранить базу данных в файл
+void save_data_base(void);
+/// Загрузить базу данных из файла
+void load_data_base(void);
+/// Отобразить список
+void print_list(Appartment list[], int num);
+
+/// Проверка значений для функции qsort: этаж и номер
+int compare_floor_number(const void* lhs, const void* rhs);
+/// Проверка значений для функции qsort: этаж и площадь
+int compare_floor_area(const void* lhs, const void* rhs);
+/// Проверка значений для функции qsort: коду
+int compare_code(const void* lhs, const void* rhs);
+/// Проверка значений для функции qsort: area
+int compare_area(const void* lhs, const void* rhs);
+/// Сортированный список квартир
+Appartment* sorted_appartments_list(int (*comparer)(const void* lhs, const void* rhs));
+/// Создать модель квартиры
+int create_appartment(Appartment* appartment);
+/// Добавить
+void menu_create(void);
+/// Изменить
+void menu_update(void);
+/// Проверка значений для функции qsort: этаж и номер
+int compare_floor_number(const void* lhs, const void* rhs);
+/// Проверка значений для функции qsort: этаж и площадь
+int compare_floor_area(const void* lhs, const void* rhs);
+/// Проверка значений для функции qsort: коду
+int compare_code(const void* lhs, const void* rhs);
+/// Сортированный список квартир
+Appartment* sorted_appartments_list(int (*comparer)(const void* lhs, const void* rhs));
+/// Список квартир
+void appartments_list(void);
+/// Список квартир
+void appartments_list(void);
+/// Поиск по коду
+void search_by_code(void);
+/// Поиск по этажам
+void search_by_floor(void);
+/// Меню редактирования
+void menu_edit(void);
+/// Меню поиска
+void menu_find(void);
+// Тестовая база данных
+void menu_test(void);
+/// Меню списка
+void menu_list(void);
+
+
+
+/// Список квартир
+Appartments appartments;
+/// Имя файла базы данных
+char data_base_name[] = "data_base.json";
+
+/// Квартира по: этаж, номер или NULL
+Appartment* found_appartment(int floor, int number) {
+    for (int i = 0; i < appartments.count_appartments; i++) {
+        if (appartments.appartments[i].location.floor == floor && appartments.appartments[i].location.number == number) {
+            return &appartments.appartments[i];
+        }
+    }
+    return NULL;
+}
+
+
+int main(int argc, const char* argv[]) {
+    setlocale(LC_ALL, "rus");
+    setlocale(LC_NUMERIC, "en-US");
+
+
+    printf("\t|============\t\tКурсовая работа\t\t\t============|\n");
+    printf("\t|============\tТема: БД Квартира\t\t\t============|\n");
+    printf("\t|============\tГруппа: БИСТ221\t\t\t\t============|\n");
+    printf("\t|============\tСтудент: Петришина Мария\t============|\n");
+    printf("\n\n\t\t\t Для продолжение нажмите <Enter>\n");
+    getchar();
+
+    // Загрузить БД
+    load_data_base();
+
+    int selected_item = 0;
+    do {
+        selected_item = menu_system();
+    } while (selected_item > 0);
+
+    return 0;
+}
+
+/// Создать модель квартиры
+int create_appartment(Appartment* appartment) {
+    int floor = 0;
+    do {
+        printf("\n\tЭтаж (<0> - Отмена): ");
+        scanf("%d", &floor);
+        if (floor == 0) { return 0; }
+        if (floor < 0) {
+            printf("\nОжидается значение больше 0");
+        }
+    } while (floor < 1);
+    appartment->location.floor = floor;
+
+    int number = 0;
+    do {
+        printf("\n\tНомер (<0> - Отмена): ");
+        scanf("%d", &number);
+        if (number == 0) { return 0; }
+        if (number < 1) {
+            printf("\nОжидается значение больше 0");
+        }
+        else if (found_appartment(floor, number) != NULL) {
+            printf("\nКвартира %d-%d уже существует", floor, number);
+        }
+    } while (number < 1 || found_appartment(floor, number) != NULL);
+    appartment->location.number = number;
+
+    double area = 0;
+    do {
+        printf("\n\tПлощадь (<0> - Отмена): ");
+        scanf("%lf", &area);
+        if (area == 0) { return 0; }
+        if (area < 1) {
+            printf("\nОжидается значение больше 0");
+        }
+    } while (area < 1);
+    appartment->area = area;
+
+    int count_rooms = 0;
+    do {
+        printf("\n\tКоличество комнат (<0> - Отмена): ");
+        scanf("%d", &count_rooms);
+        if (count_rooms == 0) { return 0; }
+        if (count_rooms < 1) {
+            printf("\nОжидается значение больше 0");
+        }
+    } while (area < 1);
+    appartment->count_rooms = count_rooms;
+    Room* rooms = calloc(count_rooms, sizeof(Room));
+    /// Общая площадь комнат
+    double rooms_area = 0;
+
+    for (int i = 0; i < count_rooms; i++) {
+        double area_room = 0;
+        double suitable_area = appartment->area;
+        do {
+            double main_area = rooms_area;
+            suitable_area = appartment->area - main_area;
+            printf("\n\tПлощадь %d-й комнаты из %.2lf (<0> - Отмена): ", i + 1, suitable_area);
+            scanf("%lf", &area_room);
+            if (area_room == 0) { return 0; }
+            if (area_room < 1) {
+                printf("\nОжидается значение больше 0");
+            }
+            else if (area_room > suitable_area) {
+                printf("\nОжидается значение меньше %.2lf", suitable_area);
+            }
+        } while (area_room < 1 || area_room > suitable_area);
+        rooms[i].area = area_room;
+        rooms_area += area_room;
+
+        int windows = 0;
+        do {
+            printf("\n\tКоличество окон в %d-й комнате (<33> - Отмена): ", i + 1);
+            scanf("%d", &windows);
+            if (windows == 33) { return 0; }
+            if (windows < 0) {
+                printf("\nОжидается значение больше 0");
+            }
+        } while (windows < 0);
+        rooms[i].windows = windows;
+
+        int is_balkony = 0;
+        do {
+            printf("\n\tВыход на балкон в %d-й комнате (<0> - нет, <1> - есть, <33> - Отмена): ", i + 1);
+            scanf("%d", &is_balkony);
+            if (is_balkony == 33) { return 0; }
+            if (is_balkony < 0) {
+                printf("\nОжидается значение больше 0");
+            }
+            else if (is_balkony != 0 && is_balkony != 1) {
+                printf("\nОжидается значение 0 или 1");
+            }
+        } while (is_balkony != 0 && is_balkony != 1);
+        rooms[i].is_balkony = is_balkony;
+        appartment->rooms = rooms;
+    }
+    return 1;
+}
+
+/// Добавить
+void menu_create(void) {
+    printf("\n\t|============\t\tСписок квартир:\t\t============|\n");
+    printf("\n\t(Сортировка по этажу-номеру)\n");
+    Appartment* sorted_appartments = sorted_appartments_list(compare_floor_number);
+    print_list(sorted_appartments, appartments.count_appartments);
+    free(sorted_appartments);
+
+    printf("\n\t|============\t\tДобавить квартиру\t\t============|\n");
+
+    /// Новая квартира
+    Appartment appartment;
+    sprintf(appartment.code, "a%ld", time(0));
+    if (create_appartment(&appartment) == 0) { return; }
+
+    int count = appartments.count_appartments + 1;
+    Appartment* modified = calloc(count, sizeof(Appartment));
+    for (int i = 0; i < count; i++) {
+        if (i < appartments.count_appartments) {
+            modified[i] = appartments.appartments[i];
+        }
+        else {
+            modified[i] = appartment;
+        }
+    }
+    appartments.appartments = modified;
+    appartments.count_appartments = count;
+
+    // Сохранить БД
+    save_data_base();
+    printf("\nДобавлена квартира с кодом: <%s>\n", appartment.code);
+}
+
+/// Изменить
+void menu_update(void) {
+    printf("\n\t|============\t\tСписок квартир:\t\t============|\n");
+    printf("\n\t(Сортировка по коду)\n");
+    Appartment* sorted_appartments = sorted_appartments_list(compare_code);
+    print_list(sorted_appartments, appartments.count_appartments);
+    free(sorted_appartments);
+
+    printf("\n\t|============\t\tИзменить параметры квартиры\t\t============|\n");
+
+    int found_index = -1;
+    char code[12] = "";
+    do {
+        printf("\n\nВведите код квартиры и нажмите <Enter> (<0> - Выход): ");
+        scanf("%s", code);
+        if (strcmp(code, "0") == 0) { return; }
+        for (int i = 0; i < appartments.count_appartments; i++) {
+            if (strcmp(appartments.appartments[i].code, code) != 0) { continue; }
+            found_index = i;
+            break;
+        }
+        if (found_index < 0) {
+            printf("\nНе найдена квартира с кодом: <%s>!", code);
+        }
+    } while (found_index < 0);
+
+    print_list((appartments.appartments + found_index), 1);
+    printf("\n%*s %*s %*s %*s %*s",
+        36, "Комнаты",
+        10, "№",
+        25, "Площадь",
+        34, "Количество окон",
+        32, "Наличие балкона");
+    for (int i = 0; i < appartments.appartments[found_index].count_rooms; i++) {
+        char* is_balkony = appartments.appartments[found_index].rooms[i].is_balkony == 1 ? "есть" : "нет";
+        printf("\n%*d-ая %*.2lf %*d %*s",
+            35, i + 1,
+            18, appartments.appartments[found_index].rooms[i].area,
+            20, appartments.appartments[found_index].rooms[i].windows,
+            21, is_balkony);
+    }
+    printf("\n");
+
+    Appartment appartment;
+    sprintf(appartment.code, "%s", code);
+    if (create_appartment(&appartment) == 0) { return; }
+    appartments.appartments[found_index] = appartment;
+
+    // Сохранить БД
+    save_data_base();
+    printf("\nИзменены параметры квартиры с кодом: <%s>\n", code);
+}
+
+/// Удалить
+void menu_delete(void) {
+    printf("\n\t|============\t\tСписок квартир:\t\t============|\n");
+    printf("\n\t(Сортировка по коду)\n");
+    Appartment* sorted_appartments = sorted_appartments_list(compare_code);
+    print_list(sorted_appartments, appartments.count_appartments);
+    free(sorted_appartments);
+
+    printf("\n\t|============\t\tУдалить квартиру\t\t============|\n");
+
+    int found_index = -1;
+    char code[12] = "";
+    do {
+        printf("\n\nВведите код квартиры и нажмите <Enter> (<0> - Выход): ");
+        scanf("%s", code);
+        if (strcmp(code, "0") == 0) { return; }
+        for (int i = 0; i < appartments.count_appartments; i++) {
+            if (strcmp(appartments.appartments[i].code, code) != 0) { continue; }
+            found_index = i;
+            break;
+        }
+        if (found_index < 0) {
+            printf("\nНе найдена квартира с кодом: <%s>!", code);
+        }
+    } while (found_index < 0);
+    for (int i = found_index; i < appartments.count_appartments - 1; i++) {
+        appartments.appartments[i] = appartments.appartments[i + 1];
+    }
+    appartments.count_appartments -= 1;
+
+    // Сохранить БД
+    save_data_base();
+    printf("\nУдалена квартира с кодом: <%s>\n", code);
+}
+
+/// Проверка значений для функции qsort: этаж и номер
+int compare_floor_number(const void* lhs, const void* rhs) {
+    Appartment left = *((Appartment*)lhs);
+    Appartment right = *((Appartment*)rhs);
+    // выражение для сравнения: -1, 0, 1
+    if (left.location.floor > right.location.floor)
+        return(+1);
+    else if (left.location.floor < right.location.floor)
+        return(-1);
+    else if (left.location.number > right.location.number)
+        return(+1);
+    else if (left.location.number < right.location.number)
+        return(-1);
+    else
+        return(0);
+}
+
+/// Проверка значений для функции qsort: этаж и площадь
+int compare_floor_area(const void* lhs, const void* rhs) {
+    Appartment left = *((Appartment*)lhs);
+    Appartment right = *((Appartment*)rhs);
+    // выражение для сравнения: -1, 0, 1
+    if (left.location.floor > right.location.floor)
+        return(+1);
+    else if (left.location.floor < right.location.floor)
+        return(-1);
+    else if (left.area > right.area)
+        return(+1);
+    else if (left.area < right.area)
+        return(-1);
+    else
+        return(0);
+}
+
+/// Проверка значений для функции qsort: коду
+int compare_code(const void* lhs, const void* rhs) {
+    Appartment left = *((Appartment*)lhs);
+    Appartment right = *((Appartment*)rhs);
+    // выражение для сравнения: -1, 0, 1
+    return strcmp(left.code, right.code);
+}
+
+/// Проверка значений для функции qsort: площади
+int compare_area(const void* lhs, const void* rhs) {
+    Appartment left = *((Appartment*)lhs);
+    Appartment right = *((Appartment*)rhs);
+    // выражение для сравнения: -1, 0, 1
+    return (left.area > right.area) - (left.area < right.area);
+}
+
+/// Сортированный список квартир
+Appartment* sorted_appartments_list(int (*comparer)(const void* lhs, const void* rhs)) {
+    Appartment* sorted_appartments = calloc(appartments.count_appartments, sizeof(Appartment));
+    for (int i = 0; i < appartments.count_appartments; i++) {
+        sorted_appartments[i] = appartments.appartments[i];
+    }
+    qsort(sorted_appartments, appartments.count_appartments, sizeof(Appartment), comparer);
+    return sorted_appartments;
+}
+
+void print_list(Appartment list[], int num) {
+    printf("\n%*s %*s %*s %*s %*s",
+        21, "Код",
+        14, "Этаж",
+        10, "№",
+        30, "Общая площадь",
+        31, "Количество комнат");
+    for (int i = 0; i < num; i++) {
+        printf("\n%*s %*d %*d %*.2lf %*d",
+            20, list[i].code,
+            15, list[i].location.floor,
+            10, list[i].location.number,
+            30, list[i].area,
+            30, list[i].count_rooms);
+    }
+    printf("\n");
+}
+
+/// Список квартир
+void appartments_list(void) {
+    printf("\n\t|============\t\tСписок квартир\t\t============|\n");
+    printf("\n\t(Сортировка по площади)\n");
+    Appartment* sorted_appartments = sorted_appartments_list(compare_area);
+    print_list(sorted_appartments, appartments.count_appartments);
+    free(sorted_appartments);
+}
+
+/// Поиск по коду
+void search_by_code(void) {
+    printf("\n\t|============\t\tНайти квартиру: по коду\t\t============|\n");
+    printf("\n\nВведите код квартиры и нажмите <Enter>: ");
+    char code[12] = "";
+    scanf("%s", code);
+
+    Appartment* sorted_by_code = sorted_appartments_list(compare_code);
+    Appartment* found_list = calloc(1, sizeof(Appartment));
+    int found = 0;
+    for (int i = 0; i < appartments.count_appartments; i++) {
+        if (strstr(sorted_by_code[i].code, code) == NULL) { continue; }
+        found_list = realloc(found_list, ++found * sizeof(Appartment));
+        found_list[found - 1] = sorted_by_code[i];
+    }
+    if (found > 0) {
+        printf("\n\t(Сортировка по коду)\n");
+        print_list(found_list, found);
+    }
+    else {
+        printf("Не найдена квартира с кодом: %s", code);
+    }
+
+    free(found_list);
+    free(sorted_by_code);
+}
+
+/// Поиск по этажам
+void search_by_floor(void) {
+    printf("\n\t|============\t\tНайти квартиру: по этажам\t\t============|\n");
+    printf("\n\nВведите диапозон этажей (от-до) и нажмите <Enter>: ");
+    int min_floor;
+    int max_floor;
+    scanf("%d-%d", &min_floor, &max_floor);
+
+    int min = min_floor < max_floor ? min_floor : max_floor;
+    int max = max_floor > min_floor ? max_floor : min_floor;
+
+    Appartment* sorted_by_floor = sorted_appartments_list(compare_floor_area);
+    Appartment* found_list = calloc(1, sizeof(Appartment));
+    int found = 0;
+    for (int i = 0; i < appartments.count_appartments; i++) {
+        if (sorted_by_floor[i].location.floor < min) { continue; }
+        if (sorted_by_floor[i].location.floor > max) { break; }
+        found_list = realloc(found_list, ++found * sizeof(Appartment));
+        found_list[found - 1] = sorted_by_floor[i];
+    }
+    printf("\n\t(Сортировка по этажу-площади)\n");
+    print_list(found_list, found);
+
+    free(found_list);
+    free(sorted_by_floor);
+}
+
+/// Меню поиска
+void menu_find(void) {
+    int selected_item = 0;
+    do {
+        printf("\n\t|============\t\tНайти квартиру\t\t============|\n");
+        printf("\n<1>: Поиск по коду");
+        printf("\n<2>: Поиск по этажам");
+        printf("\n<0>: Выход");
+        printf("\n\nВыберите действие и нажмите <Enter>: ");
+        scanf("%d", &selected_item);
+        switch (selected_item) {
+        case 0:
+            break;
+        case 1:
+            search_by_code();
+            break;
+        case 2:
+            search_by_floor();
+            break;
+        default:
+            printf("Действие <%d> не поддерживается!\n", selected_item);
+            break;
+        }
+    } while (selected_item > 0);
+}
+
+/// Меню редактирования
+void menu_edit(void) {
+    int selected_item = 0;
+    do {
+        printf("\n\t|============\t\tРедактирование квартир\t\t============|\n");
+        printf("\n<1>: Добавить");
+        printf("\n<2>: Изменить");
+        printf("\n<3>: Удалить");
+        printf("\n<0>: Выход");
+        printf("\n\nВыберите действие и нажмите <Enter>: ");
+        scanf("%d", &selected_item);
+        switch (selected_item) {
+        case 0:
+            break;
+        case 1:
+            menu_create();
+            break;
+        case 2:
+            menu_update();
+            break;
+        case 3:
+            menu_delete();
+            break;
+        default:
+            printf("Действие <%d> не поддерживается!\n", selected_item);
+            break;
+        }
+    } while (selected_item > 0);
+}
+
+void menu_test(void) {
+    FILE* data_base;
+
+    if ((data_base = fopen(data_base_name, "w")) == NULL) { exit(1); }
+
+    fprintf(data_base, "{\"count_appartments\":5,\"appartments\":[");
+    fprintf(data_base, "{\"count_rooms\":1,\"area\":20.4,\"code\":\"a0000010\",\"location\":{\"floor\":2,\"number\":2},\"rooms\":[{\"area\":16.8,\"windows\":1,\"is_balkony\":1}]},");
+    fprintf(data_base, "{\"count_rooms\":1,\"area\":21.6,\"code\":\"a0000011\",\"location\":{\"floor\":2,\"number\":1},\"rooms\":[{\"area\":17.1,\"windows\":1,\"is_balkony\":1}]},");
+    fprintf(data_base, "{\"count_rooms\":2,\"area\":46.8,\"code\":\"a0000220\",\"location\":{\"floor\":1,\"number\":3},\"rooms\":[{\"area\":20.4,\"windows\":1,\"is_balkony\":1},{\"area\":22.1,\"windows\":1,\"is_balkony\":0}]},");
+    fprintf(data_base, "{\"count_rooms\":2,\"area\":42.6,\"code\":\"a0000221\",\"location\":{\"floor\":1,\"number\":1},\"rooms\":[{\"area\":16.4,\"windows\":1,\"is_balkony\":0},{\"area\":24.6,\"windows\":1,\"is_balkony\":1}]},");
+    fprintf(data_base, "{\"count_rooms\":3,\"area\":72.2,\"code\":\"a0000321\",\"location\":{\"floor\":8,\"number\":333},\"rooms\":[{\"area\":16.4,\"windows\":1,\"is_balkony\":0},{\"area\":24.6,\"windows\":1,\"is_balkony\":1},{\"area\":20.1,\"windows\":1,\"is_balkony\":0}]}");
+    fprintf(data_base, "]}");
+
+    fclose(data_base);
+    load_data_base();
+}
+
+/// Меню списка
+void menu_list(void) {
+    int selected_item = 0;
+    do {
+        printf("\n\t|============\t\tСписок квартир\t\t============|\n");
+        printf("\n<1>: Список");
+        printf("\n<2>: Найти");
+        printf("\n<0>: Выход");
+        printf("\n\nВыберите действие и нажмите <Enter>: ");
+        scanf("%d", &selected_item);
+        switch (selected_item) {
+        case 0:
+            break;
+        case 1:
+            appartments_list();
+            break;
+        case 2:
+            menu_find();
+            break;
+        default:
+            printf("Действие <%d> не поддерживается!\n", selected_item);
+            break;
+        }
+    } while (selected_item > 0);
+}
+
+/// Основное меню
+int menu_system(void) {
+    int selected_item = 0;
+    do {
+        printf("\n\t|============\t\tМеню\t\t============|\n");
+        printf("\n<1>: Список квартир");
+        printf("\n<2>: Редактирование");
+        printf("\n<3>: Тестовая База Данных");
+        printf("\n<0>: Выход");
+        printf("\n\nВыберите действие и нажмите <Enter>: ");
+        scanf("%d", &selected_item);
+        switch (selected_item) {
+        case 0:
+            break;
+        case 1:
+            menu_list();
+            break;
+        case 2:
+            menu_edit();
+            break;
+        case 3:
+            menu_test();
+            break;
+        default:
+            printf("Действие <%d> не поддерживается!\n", selected_item);
+            break;
+        }
+    } while (selected_item > 0);
+    return selected_item;
+}
+
+/// Чтение данных
+void load_data_base(void) {
+
+    FILE* data_base;
+
+    if ((data_base = fopen(data_base_name, "r")) == NULL) { return; }
+    fseek(data_base, 0, SEEK_SET);
+
+    fscanf(data_base, APPS_FORMAT, &appartments.count_appartments);
+    appartments.appartments = calloc(appartments.count_appartments, sizeof(Appartment));
+    for (int i = 0; i < appartments.count_appartments; i++) {
+        fscanf(data_base, APP_FORMAT_IN,
+            &appartments.appartments[i].count_rooms,
+            &appartments.appartments[i].area,
+            appartments.appartments[i].code,
+            &appartments.appartments[i].location.floor,
+            &appartments.appartments[i].location.number);
+        appartments.appartments[i].rooms = calloc(appartments.appartments[i].count_rooms, sizeof(Room));
+        for (int j = 0; j < appartments.appartments[i].count_rooms; j++) {
+            fscanf(data_base, ROOM_FORMAT,
+                &appartments.appartments[i].rooms[j].area,
+                &appartments.appartments[i].rooms[j].windows,
+                &appartments.appartments[i].rooms[j].is_balkony);
+            if (j < appartments.appartments[i].count_rooms - 1) {
+                fscanf(data_base, ",");
+            }
+        }
+        fscanf(data_base, "]}");
+        if (i < appartments.count_appartments - 1) {
+            fscanf(data_base, ",");
+        }
+    }
+    fscanf(data_base, "]}");
+    fclose(data_base);
+}
+
+/// Запись данных
+void save_data_base(void) {
+
+    FILE* data_base;
+
+    if ((data_base = fopen(data_base_name, "w")) == NULL) { exit(1); }
+
+    fprintf(data_base, APPS_FORMAT, appartments.count_appartments);
+    for (int i = 0; i < appartments.count_appartments; i++) {
+        fprintf(data_base, APP_FORMAT_OUT,
+            appartments.appartments[i].count_rooms,
+            appartments.appartments[i].area,
+            appartments.appartments[i].code,
+            appartments.appartments[i].location.floor,
+            appartments.appartments[i].location.number);
+        for (int j = 0; j < appartments.appartments[i].count_rooms; j++) {
+            fprintf(data_base, ROOM_FORMAT,
+                appartments.appartments[i].rooms[j].area,
+                appartments.appartments[i].rooms[j].windows,
+                appartments.appartments[i].rooms[j].is_balkony);
+            if (j < appartments.appartments[i].count_rooms - 1) {
+                fprintf(data_base, ",");
+            }
+        }
+        fprintf(data_base, "]}");
+        if (i < appartments.count_appartments - 1) {
+            fprintf(data_base, ",");
+        }
+    }
+    fprintf(data_base, "]}");
+    fclose(data_base);
+}
